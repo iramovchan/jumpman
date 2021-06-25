@@ -3,9 +3,10 @@
 import pygame
 from pygame.locals import *
 import random
-import time
 
 pygame.init()
+
+pygame.mixer.init()
 
 clock = pygame.time.Clock()
 
@@ -17,11 +18,14 @@ window_height = 608
 black = (0, 0, 0)
 white = (255, 255, 255)
 mint_green_bg = (144, 247, 227)
+green = (109, 141, 138)
 
 main_charac_height = 32
 main_charac_width = 32
 
 size = 32
+
+ani = 4
 
 end_game_surface = pygame.Surface((window_width, window_height))
 
@@ -81,6 +85,8 @@ def load_map():
 ground_group = pygame.sprite.Group()
 coins_group = pygame.sprite.Group()
 door_group = pygame.sprite.Group()
+guy_group = pygame.sprite.Group()
+
 game_map = load_map()
 
 
@@ -136,7 +142,24 @@ def create_map():
 
             x += 1
         y += 1
-    return ground_group, coins_group, door_group, platform_list
+    return ground_group, coins_group, door_group, platform_list, guy_group
+
+
+def find_location():
+    guy_x = random.randint(300, 3000)
+    guy_y = 300
+    y = 0
+    for row in game_map:
+        x = 0
+        for tile in row:
+            if tile == '/':
+                guy_x = x * size
+                guy_y = y * size
+
+            x += 1
+        y += 1
+
+    return guy_x, guy_y
 
 
 platform_list = []
@@ -170,13 +193,20 @@ class Coins(pygame.sprite.Sprite):
 
 particles = []
 
+guy_location = find_location()
+
 
 class MainCharac(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height):
         super().__init__()
-        self.image = pygame.image.load('16x16_pacman_right.png').convert_alpha()
-        self.image = pygame.transform.scale(self.image, (width, height))
-        self.rect = self.image.get_rect()
+        self.frame = 0
+        self.images = []
+        for i in range(1, 5):
+            img = pygame.image.load('dino_' + str(i) + '.png').convert_alpha()
+            img = pygame.transform.scale(img, (size, size))
+            self.images.append(img)
+            self.image = self.images[0]
+            self.rect = self.image.get_rect()
 
         self.rect.x = x
         self.rect.y = y
@@ -184,7 +214,7 @@ class MainCharac(pygame.sprite.Sprite):
         self.movex = 0
         self.movey = 0
 
-        self.is_jumping = False
+        self.can_jump = False
 
         self.undo = False
 
@@ -198,34 +228,32 @@ class MainCharac(pygame.sprite.Sprite):
         self.start_time = pygame.time.get_ticks()
         self.door_colliding_ = pygame.sprite.spritecollide(self, door_group, False)
 
-        self.jumped = 0
+        self.flip_to_left = False
+
+        self.jump_sound = pygame.mixer.Sound('jump_sound_1.wav')
 
     def jumping(self):
 
-        if self.is_jumping:
+        if self.can_jump:
             self.is_moving = True
+            self.jump_sound.play()
             self.movey = -17
-            self.jumped = 0
-            self.is_jumping = False
+            self.can_jump = False
 
     def move_on_x(self, x):
         self.movex = x
 
     def update(self):
 
-        ground_collide = pygame.sprite.spritecollide(self, ground_group, False)
-        if ground_collide:
-            self.is_jumping = True
-
         if self.undo:
-            self.start_time = pygame.time.get_ticks()
-            for i in door_group:
-                door_group.remove(i)
-                for row in game_map:
-                    for i in range(len(game_map)):
-                        for o in range(len(row)):
-                            if game_map[i - 1][o - 1] == '6':
-                                game_map[i - 1][o - 1] = '-'
+
+            for row in game_map:
+                for i in range(len(game_map)):
+                    for o in range(len(row)):
+                        if game_map[i - 1][o - 1] == '6':
+                            game_map[i - 1][o - 1] = '-'
+                        elif game_map[i - 1][o - 1] == '/':
+                            game_map[i - 1][o - 1] = '0'
 
             platform_list.clear()
             ground_group.empty()
@@ -233,6 +261,7 @@ class MainCharac(pygame.sprite.Sprite):
             door_group.empty()
 
             flag_exists = False
+            charac_exists = False
 
             for row in game_map:
                 while not flag_exists:
@@ -242,15 +271,25 @@ class MainCharac(pygame.sprite.Sprite):
                     if game_map[l][a] == '-':
                         game_map[l][a] = '6'
                         flag_exists = True
+                while not charac_exists:
+                    a = random.randint(0, len(row) - 1)
+                    l = random.randint(0, len(game_map) - 1)
 
-            self.image = pygame.image.load("16x16_pacman_right.png").convert_alpha()
-            self.image = pygame.transform.scale(self.image, (size, size))
-            self.rect.center = (random.randint(200, 100 * size), random.randint(200, 50 * size))
+                    if game_map[l][a] == '0':
+                        game_map[l][a] = '/'
+                        charac_exists = True
 
+            create_map()
+            guy_location = find_location()
+
+            self.start_time = pygame.time.get_ticks()
+
+            self.image = self.images[0]
+
+            self.rect.center = guy_location[0], guy_location[1]
             self.undo = False
             self.can_move = True
             self.coin_score = 0
-            create_map()
 
         if self.can_move:
 
@@ -260,20 +299,15 @@ class MainCharac(pygame.sprite.Sprite):
             self.rect.x += self.movex
 
             ground_collide = pygame.sprite.spritecollide(self, ground_group, False)
-            # if ground_collide:
-            #     self.touched_ground = pygame.time.get_ticks()
 
             for block in ground_collide:
 
                 if self.rect.x < block.rect.x:
                     self.rect.x -= self.movex
-                    # self.movex = 0
                     self.rect.x = block.rect.x - size
 
                 elif self.rect.x > block.rect.x:
                     self.rect.x -= -self.movex
-                    #
-                    # self.movex = 0
                     self.rect.x = block.rect.x + size
 
             self.rect.y += self.movey
@@ -287,15 +321,15 @@ class MainCharac(pygame.sprite.Sprite):
                     self.movey = 0
 
                 elif self.movey > 0:
-                    self.is_jumping = True
+                    self.can_jump = True
 
                     self.rect.y = block.rect.y - size
                     self.movey = 0
 
-            if not ground_collide:
-                self.is_jumping = False
-
             self.movey += self.gravity
+
+            if not ground_collide:
+                self.can_jump = False
 
             # colliding coins
 
@@ -303,6 +337,19 @@ class MainCharac(pygame.sprite.Sprite):
             if coin_colliding:
                 for a_coin in coin_colliding:
                     self.coin_score += 1
+
+            # flipping image to a direction you are going in
+            if self.movex < 0:
+                self.frame += 1
+                if self.frame > 3*ani:
+                    self.frame = 0
+                self.image = pygame.transform.flip(self.images[self.frame // ani], True, False)
+
+            if self.movex > 0:
+                self.frame += 1
+                if self.frame > 3 * ani:
+                    self.frame = 0
+                self.image = self.images[self.frame//ani]
 
     def undo_win(self):
         end_game_surface.set_alpha(0)
@@ -317,31 +364,31 @@ class MainCharac(pygame.sprite.Sprite):
             millis = ticks % 1000
             seconds = int(ticks / 1000 % 60)
             minutes = int(ticks / 60000 % 24)
-            out = '{minutes:02d}{seconds:02d}{millis}'.format(minutes=minutes, millis=millis, seconds=seconds)
+            out = '{minutes:02d}:{seconds:02d}:{millis}'.format(minutes=minutes, millis=millis, seconds=seconds)
             score_text_time = font.render(f'''You did it in  {out}''', False, white)
             score_text_time_rect = score_text_time.get_rect()
             score_text_time_rect.center = (window_width / 2, window_height / 2)
             end_game_surface.blit(score_text_time, score_text_time_rect)
 
-            best_score = open('best_score.txt', 'w+')
+            best_score = open('best_score.txt', 'r')
             data = best_score.read()
             data = data.split('\n')
             time_list = []
             for row in data:
                 time_list.append(row)
-            # best_score.close()
-            print(time_list[0])
-            if not time_list[0]:
-                # best_score = open('best_score.txt', 'w+')
+            best_score.close()
+
+            if time_list[0] == '':
+                best_score = open('best_score.txt', 'w+')
                 best_score.write(str(ticks))
-                # best_score.close()
+                best_score.close()
 
             elif ticks < int(time_list[0]):
-                # best_score = open('best_score.txt', 'w+')
+                best_score = open('best_score.txt', 'w+')
                 best_score.write(str(ticks))
-                # best_score.close()
+                best_score.close()
 
-            # best_score = open('best_score.txt', 'r')
+            best_score = open('best_score.txt', 'r')
             data = best_score.read()
             millis_1 = int(data) % 1000
             seconds_1 = int(int(data) / 1000 % 60)
@@ -362,7 +409,7 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, image, size_x, size_y, place_x, place_y):
         super().__init__()
         self.image = pygame.image.load(image).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (size_x, size_y))  # add a size to where you want to resize
+        self.image = pygame.transform.scale(self.image, (size_x, size_y))
         self.rect = self.image.get_rect()
         self.rect.center = (place_x, place_y)
         self.movex = 0
@@ -389,14 +436,12 @@ class Enemy(pygame.sprite.Sprite):
 blockx = 64
 blocky = size
 
-guy = MainCharac(300, 300, size, main_charac_height)
-
-guy_group = pygame.sprite.Group()
-guy_group.add(guy)
-
-steps = 10
+speed = 10
 
 main_menu = MainMenu()
+
+guy = MainCharac(guy_location[0], guy_location[1], size, main_charac_height)
+guy_group.add(guy)
 
 main_menu_group = pygame.sprite.Group()
 main_menu_group.add(main_menu)
@@ -415,12 +460,10 @@ count_coins_rect = count_coins.get_rect()
 count_coins_rect.topleft = (0, 0)
 
 end_game = False
-move_platforms_right = False
-move_platforms_left = False
 
-right = False
-left = False
-jump = False
+play_again = True
+
+background_music = pygame.mixer.Sound("background_music.wav")
 
 while not end_game:
 
@@ -460,6 +503,10 @@ while not end_game:
     coins_group.draw(screen)
     ground_group.draw(screen)
     door_group.draw(screen)
+
+    if not guy.can_move:
+        play_again = True
+
     if not guy.door_colliding_:
         ticks = pygame.time.get_ticks() - guy.start_time
         millis = ticks % 1000
@@ -485,54 +532,41 @@ while not end_game:
             analog_keys[event.axis] = event.value
             if abs(analog_keys[0]) > .4:
                 if analog_keys[0] > 0.7:
-                    guy.move_on_x(10)
-                    move_platforms_left = True
+                    guy.move_on_x(speed)
                     guy.image = pygame.image.load("16x16_pacman_right.png").convert_alpha()
                     guy.image = pygame.transform.scale(guy.image, (size, size))
                     guy.is_moving = True
                 elif analog_keys[0] < - 0.7:
-                    guy.move_on_x(-10)
-                    move_platforms_right = True
+                    guy.move_on_x(-speed)
                     guy.image = pygame.image.load("16x16_pacman_left.png").convert_alpha()
                     guy.image = pygame.transform.scale(guy.image, (size, size))
                     guy.is_moving = True
             else:
                 guy.move_on_x(-0)
-                move_platforms_left = False
-                move_platforms_right = False
                 guy.is_moving = False
 
         if event.type == KEYDOWN:
             if event.key == K_RIGHT or event.key == K_d:
-                guy.move_on_x(10)
-                move_platforms_left = True
-                guy.image = pygame.image.load("16x16_pacman_right.png").convert_alpha()
-                guy.image = pygame.transform.scale(guy.image, (size, size))
+                guy.move_on_x(speed)
                 guy.is_moving = True
 
             if event.key == K_LEFT or event.key == K_a:
-                guy.move_on_x(-10)
-                move_platforms_right = True
-                guy.image = pygame.image.load("16x16_pacman_left.png").convert_alpha()
-                guy.image = pygame.transform.scale(guy.image, (size, size))
-                guy.is_moving = True
+                guy.move_on_x(-speed)
 
             if event.key == K_SPACE:
-                guy.jumped = pygame.time.get_ticks()
                 guy.jumping()
 
             if event.key == K_q:
                 main_menu.start_again = True
+                play_again = True
 
         if event.type == KEYUP:
             if event.key == K_RIGHT or event.key == K_d:
                 guy.move_on_x(-0)
-                move_platforms_left = False
                 guy.is_moving = False
 
             if event.key == K_LEFT or event.key == K_a:
                 guy.move_on_x(0)
-                move_platforms_right = False
                 guy.is_moving = False
 
             if event.key == K_SPACE:
@@ -540,13 +574,18 @@ while not end_game:
 
         if event.type == MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
-            if text_rect.collidepoint(mouse_pos):
-                guy.undo = True
-                guy.can_move = True
-            if start_new_game_rect.collidepoint(mouse_pos):
-                main_menu.start_a_game = True
-                guy.undo = True
-                main_menu.start_again = False
+            if play_again:
+                background_music.stop()
+                background_music.play(-1)
+                if text_rect.collidepoint(mouse_pos):
+                    guy.undo = True
+                    guy.can_move = True
+                    play_again = False
+                if start_new_game_rect.collidepoint(mouse_pos):
+                    main_menu.start_a_game = True
+                    guy.undo = True
+                    main_menu.start_again = False
+                    play_again = False
 
     if guy.undo:
         guy.undo_win()
@@ -565,4 +604,3 @@ while not end_game:
 
 pygame.quit()
 quit()
-# finish
