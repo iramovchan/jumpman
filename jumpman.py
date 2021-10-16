@@ -150,16 +150,6 @@ class Platform(pygame.sprite.Sprite):
         self.movey = 0
 
 
-class Coins(pygame.sprite.Sprite):
-    def __init__(self, x_loc, y_loc):
-        super().__init__()
-        self.image = pygame.image.load('coin.png').convert_alpha()
-        self.image = pygame.transform.scale(self.image, (size, size))
-        self.rect = self.image.get_rect()
-        self.rect.x = x_loc
-        self.rect.y = y_loc
-
-
 particles = []
 
 guy_location = find_location()
@@ -196,8 +186,6 @@ class MainCharac(pygame.sprite.Sprite):
 
         self.start_time = pygame.time.get_ticks()
         self.door_colliding_ = pygame.sprite.spritecollide(self, door_group, False)
-
-        self.flip_to_left = False
 
         self.jump_sound = pygame.mixer.Sound('jump_sound_1.wav')
 
@@ -327,6 +315,7 @@ class MainCharac(pygame.sprite.Sprite):
     def door_colliding(self, ticks):
         window_width, window_height = pygame.display.get_window_size()
         end_game_surface = pygame.Surface((window_width, window_height))
+        font = pygame.font.Font('ka1.ttf', int(window_height / 105) * 10)
 
         text = font.render('PLAY AGAIN ', False, white)
         text_rect = text.get_rect()
@@ -377,33 +366,6 @@ class MainCharac(pygame.sprite.Sprite):
         screen.blit(end_game_surface, (0, 0))
         self.can_move = False
 
-
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self, image, size_x, size_y, place_x, place_y):
-        super().__init__()
-        self.image = pygame.image.load(image).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (size_x, size_y))
-        self.rect = self.image.get_rect()
-        self.rect.center = (place_x, place_y)
-        self.movex = 0
-        self.movey = 0
-        self.count_move = 0
-
-    def movement(self):
-
-        distance = 50
-        speed = 5
-
-        if self.count_move >= 0 and self.count_move <= distance:
-            self.rect.x += speed
-        elif self.count_move >= distance and self.count_move <= distance * 2:
-            self.rect.x -= speed
-        else:
-            self.count_move = 0
-
-        self.count_move += 1
-
-
 # screen setup
 
 speed = 10
@@ -411,7 +373,7 @@ speed = 10
 guy = MainCharac(guy_location[0], guy_location[1], size, main_charac_height)
 guy_group.add(guy)
 
-font = pygame.font.Font('ka1.ttf', 48)
+font = pygame.font.Font('ka1.ttf', int(window_height / 105) * 10)
 
 count_coins = font.render(f'Time : ', False, white)
 count_coins_rect = count_coins.get_rect()
@@ -641,7 +603,6 @@ def main_menu():
 
     while running:
         window_width, window_height = pygame.display.get_window_size()
-
         img_size = int(window_height / 4)
 
         jumpman_light = pygame.image.load('jumpman_light.png').convert_alpha()
